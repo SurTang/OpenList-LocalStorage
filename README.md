@@ -126,6 +126,10 @@ git push local v4.0.1
 
 也可在 Actions 页面手动 `Run workflow`，只产出 artifact 不发布 Release。
 
+## 功能规格
+
+完整功能描述见 [docs/FEATURES.md](docs/FEATURES.md)：角色与权限位、登录与两步验证、文件浏览与批量操作、上传、预览、分享、管理后台、存储驱动字段、任务系统、命令行、接口概览、非功能需求与已知限制，附录含 75 项设置全表。
+
 ## 目录结构
 
 ```
