@@ -109,6 +109,23 @@ node server.js
 
 启动器会守护 exe：进程异常退出自动重启，收到 SIGINT/SIGTERM 时优雅停止，并打印 `http://127.0.0.1:<port>`。可直接交给 PM2、nssm 或 Windows 计划任务托管。
 
+## 自动构建与发布
+
+推 tag 即触发 GitHub Actions（Windows runner）编译并发布 Release：
+
+```bat
+git tag v4.0.1
+git push local v4.0.1
+```
+
+流程：`go build` → 启动 exe 跑 `/ping` 冒烟测试 → 打包 → 上传 Release。产物：
+
+- `OpenList-LocalStorage_<tag>_windows-amd64.zip`：exe + `start.cmd` + IIS/Node 部署文件 + 文档
+- `openlist.exe`：程序本体
+- `SHA256SUMS.txt`：校验和
+
+也可在 Actions 页面手动 `Run workflow`，只产出 artifact 不发布 Release。
+
 ## 目录结构
 
 ```
