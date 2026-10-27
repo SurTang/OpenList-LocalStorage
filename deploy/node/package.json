@@ -1,0 +1,13 @@
+{
+  "name": "openlist-fileserver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows 本地文件服务器（OpenList 改造版）Node.js 启动器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

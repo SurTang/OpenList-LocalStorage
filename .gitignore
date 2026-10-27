@@ -1,0 +1,37 @@
+.idea/
+.DS_Store
+.VSCodeCounter
+output/
+
+# 运行时数据与日志
+/data/
+/tmp/
+/log/
+/imgs/
+/daemon/
+/lang/
+/deploy/**/data/
+*.db
+*.log
+
+# 编译产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.bin
+*.syso
+*.test
+*.out
+
+# 构建输出（前端源码位于 public/dist，需要纳入版本管理）
+/build/
+/dist/
+/bin/*
+
+# 仅忽略根目录的本地配置文件
+/config.json
+
+# 界面截图（本地预览用）
+/.preview/

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<base href="{{base}}">
+<script>window.__SITE__ = { cdn: undefined, base_path: undefined, main_color: undefined };</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>文件服务器</title>
+<link id="site-favicon" rel="icon" href="assets/images/favicon.svg">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.3 2.9 8.2 7 9.5 4.1-1.3 7-5.2 7-9.5V6z"/></symbol>
+  <symbol id="i-login" viewBox="0 0 24 24"><path d="M13 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5v-2h4V6h-4zM4 11h9l-3-3 1.4-1.4L16.8 12l-5.4 5.4L10 16l3-3H4z"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M11 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5v-2H7V6h4zm2.6 4.4L16.2 11H9v2h7.2l-2.6 2.6L15 17l5-5-5-5z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h7l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm7 1.5V9h4.5z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm2.5 3A1.5 1.5 0 1 0 6.5 11 1.5 1.5 0 0 0 6.5 8zM5 17h14l-4.5-6-3.2 4-2-2.4z"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="M4 5h11a1 1 0 0 1 1 1v3.2l5-3v13.6l-5-3V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 24 24"><path d="M9 18a3 3 0 1 1-3-3 3 3 0 0 1 1 .2V5l12-2v3l-10 1.7V18z"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zm2 7h8v2H8zm0 4h8v2H8zm0-8v2h5V6z"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 4h16v4H4zm1 5h14v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1zm6 1v2h2v-2zm0 4v2h2v-2z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3 6.5 8.5 8 10l3-3v8h2V7l3 3 1.5-1.5zM5 18h14v2H5z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 1-6.7 9H3.2A9 9 0 1 0 5 6.7V3H3v6h6V7h-.6A6.9 6.9 0 0 1 12 5z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM15 15l5 5-1.4 1.4-5-5z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M11 4h2v8l3-3 1.4 1.4L12 16l-5.4-5.6L8 9l3 3zM5 18h14v2H5z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4zM6 8h12l-1 12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M15.5 3.5 20 8 9 19H4v-5zM14 6.9 5 15.9V18h2.1l9-9z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 7H8a4 4 0 0 0 0 8h2v-2H8a2 2 0 0 1 0-4h2zm4 0h2a4 4 0 0 1 0 8h-2v-2h2a2 2 0 0 0 0-4h-2zM8 11h8v2H8z"/></symbol>
+  <symbol id="i-storage" viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v4H3V6a1 1 0 0 1 1-1zm-1 7h18v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM6 8h2v1H6zm0 6h2v1H6z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M9 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm7 1a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 19v-1.5C3 14.6 5.7 13 9 13s6 1.6 6 4.5V19zm13.5 0v-1.2c0-1.5-.5-2.7-1.4-3.6 2.9.2 5.9 1.6 5.9 3.9V19z"/></symbol>
+  <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M5 4h14v3H5zm0 6h14v3H5zm0 6h9v3H5z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="m12 3 1.6 2.3 2.7-.6.6 2.7 2.4 1.4-1.3 2.4L19 13.5l-2.2 1.6.2 2.8-2.8.4L12 21l-2.2-2.7-2.8-.4.2-2.8L5 13.5l1-2.3L4.7 8.8 7.1 7.4l.6-2.7 2.7.6zM12 9.5A2.5 2.5 0 1 0 12 14.5 2.5 2.5 0 0 0 12 9.5z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zm-1 7v7h2v-7zm0-3v2h2V7z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 7.4 1.4-1.4L12 10.6 16.6 6 18 7.4 13.4 12 18 16.6 16.6 18 12 13.4 7.4 18 6 16.6 10.6 12z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6-1.4-1.4L12.2 12 7.6 7.4z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4 4 10-10L20.4 8 9 19.4 3.6 14z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><path d="M14 3a6 6 0 0 1 5.8 7.5l2.2 2.2-2 4.3-3-.9-1.1 2.9h-2.6l-.8-3.4A6 6 0 1 1 14 3zm1 3.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 5h16v2.2H4zm0 5.9h16v2.2H4zm0 5.9h16V19H4z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></symbol>
+  <symbol id="i-check-square" viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v12h14V6zm11.6 2.9 1.4 1.4-6 6-3.4-3.4L10 11.5l2 2z"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><path d="M4 4h6v6H4zm2 2v2h2V6zM4 14h6v6H4zm2 2v2h2v-2zM14 4h6v6h-6zm2 2v2h2V6zM14 14h2v2h-2zm2 2h2v2h-2zm2-2h2v2h-2zm0 4h2v2h-2z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zm6.5 0H17v14h-3.5z"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zm12.5-.5a5 5 0 0 1 0 7l-1.4-1.4a3 3 0 0 0 0-4.2z"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zm12.3 0 1.4 1.4L16.4 12l1.3 1.3-1.4 1.4-1.3-1.3-1.3 1.3-1.4-1.4 1.3-1.3-1.3-1.3 1.4-1.4 1.3 1.3z"/></symbol>
+  <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></symbol>
+  <symbol id="i-pip" viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zm7 4h6v5h-6z"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M10 3h4v6h6v4h-6v6h-4v-6H4V9h6z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 3h11a1 1 0 0 1 1 1v11h-2V5H8zM4 7h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm1 2v10h9V9z"/></symbol>
+  <symbol id="i-checks" viewBox="0 0 24 24"><path d="m3 12.5 3.5 3.5L15 7.5 16.4 9l-9.9 10L1.6 14zM12 17h10v2H12z"/></symbol>
+  <symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M6 3h7l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2 9h2v-2h2v2h2v2h-2v2h-2v-2H8z"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm7 4v2H8v2h2v2h2v-2h2v-2h-2v-2z"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14zM5 6h5v2H7v9h9v-3h2v5H5z"/></symbol>
+  <symbol id="i-settings2" viewBox="0 0 24 24"><path d="M4 6h10v2H4zm12 0h4v2h-4zM4 11h4v2H4zm6 0h10v2H10zM4 16h12v2H4zm14 0h2v2h-2z"/></symbol>
+
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M9 3h6l1.6 2H21a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4.4zM12 8.5a5 5 0 1 0 0 9.9 5 5 0 0 0 0-9.9zm0 2a3 3 0 1 1 0 5.9 3 3 0 0 1 0-5.9z"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M7 4h10a4 4 0 0 1 4 4v3h-2V8a2 2 0 0 0-2-2H7v3L2 5l5-4zm10 16H7a4 4 0 0 1-4-4v-3h2v3a2 2 0 0 0 2 2h10v-3l5 4-5 4z"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 7.1 11.7l-1.9-1a6 6 0 1 1-.1-5.3L14 12h9V3l-3.2 3.2A8 8 0 0 0 12 4z"/></symbol>
+</svg>
+
+<div id="boot" class="boot">
+  <div class="boot-mark"></div>
+  <div class="boot-text">正在加载…</div>
+</div>
+
+<div id="app" hidden></div>
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
+
+<script src="assets/js/lib.js"></script>
+<script src="assets/js/admin.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
