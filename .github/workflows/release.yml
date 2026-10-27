@@ -1,0 +1,160 @@
+name: Release (Windows)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      note:
+        description: '可选：本次构建备注'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & Package
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Determine version
+        id: meta
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $version = '${{ github.ref_name }}'
+          } else {
+            $version = 'dev-' + '${{ github.sha }}'.Substring(0, 7)
+          }
+          $built = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd_HH:mm:ss')
+          "VERSION=$version"   | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUILT_AT=$built"    | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "version=$version built=$built"
+
+      - name: Build exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $commit = '${{ github.sha }}'.Substring(0, 7)
+          $ldflags = "-s -w " +
+            "-X github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$($env:VERSION) " +
+            "-X github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=$commit " +
+            "-X github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=$($env:BUILT_AT) " +
+            "-X github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local"
+
+          $env:CGO_ENABLED = '0'
+          $env:GOFLAGS = '-mod=mod'
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+
+          go build -trimpath -ldflags $ldflags -o build/openlist.exe .
+          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+
+          $exe = Get-Item build/openlist.exe
+          Write-Host ("built: {0} ({1:N1} MB)" -f $exe.Name, ($exe.Length / 1MB))
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:OPENLIST_HTTP_PORT = '15245'
+          $env:OPENLIST_ADDR = '127.0.0.1'
+          $proc = Start-Process -FilePath build/openlist.exe -ArgumentList 'server','--data','.smoke-data' -PassThru -WindowStyle Hidden
+          $ok = $false
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+              $r = Invoke-WebRequest -Uri 'http://127.0.0.1:15245/ping' -UseBasicParsing -TimeoutSec 2
+              if ($r.Content.Trim() -eq 'pong') { $ok = $true; break }
+            } catch {}
+          }
+          if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          Remove-Item -Recurse -Force .smoke-data -ErrorAction SilentlyContinue
+          if (-not $ok) { throw 'smoke test failed: /ping did not return pong' }
+          Write-Host 'smoke test passed'
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = 'package'
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item build/openlist.exe        $stage/
+          Copy-Item deploy/start.cmd          $stage/
+          Copy-Item deploy/iis/web.config     $stage/
+          Copy-Item deploy/node/server.js     $stage/
+          Copy-Item deploy/node/package.json  $stage/
+          Copy-Item README.md                 $stage/
+          Copy-Item LICENSE                   $stage/
+
+          $zip = "OpenList-LocalStorage_$($env:VERSION)_windows-amd64.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath $zip -CompressionLevel Optimal
+
+          $lines = @()
+          $lines += (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  $zip"
+          $lines += (Get-FileHash build/openlist.exe -Algorithm SHA256).Hash.ToLower() + "  openlist.exe"
+          $lines | Set-Content -Path SHA256SUMS.txt -Encoding ascii
+
+          Get-ChildItem $zip | Select-Object Name, Length
+          Get-Content SHA256SUMS.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-windows-amd64
+          path: |
+            build/openlist.exe
+            OpenList-LocalStorage_*_windows-amd64.zip
+            SHA256SUMS.txt
+          retention-days: 7
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body: |
+            Windows 单文件版（前端资源已内嵌）。
+
+            **下载**
+            - `OpenList-LocalStorage_${{ github.ref_name }}_windows-amd64.zip`：完整包（exe + 启动脚本 + IIS/Node 部署文件 + 文档）
+            - `openlist.exe`：只要程序本体，与上面的 exe 相同
+            - `SHA256SUMS.txt`：校验和
+
+            **运行**
+            ```
+            openlist.exe server --data .\data
+            ```
+            默认监听 `http://127.0.0.1:5245`，首次访问进入初始化向导。
+
+            **部署**
+            - 单文件：双击 `start.cmd`
+            - IIS：`web.config` + HttpPlatformHandler
+            - Node.js：`node server.js`
+
+            基于 [OpenList](https://github.com/OpenListTeam/OpenList)（AGPL-3.0）改造。
+          files: |
+            OpenList-LocalStorage_*_windows-amd64.zip
+            build/openlist.exe
+            SHA256SUMS.txt
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
