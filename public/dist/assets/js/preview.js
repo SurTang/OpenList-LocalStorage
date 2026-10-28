@@ -179,41 +179,19 @@
   }
   function rowIndex(ref) { const m = /(\d+)$/.exec(ref || ''); return m ? Number(m[1]) - 1 : 0; }
 
-  async function renderXlsx(container, zip) {
-    const shared = [];
-    if (zip.has('xl/sharedStrings.xml')) {
-      const xml = await zip.xml('xl/sharedStrings.xml');
-      descendants(xml, 'si').forEach((si) => shared.push(nodeText(si)));
-    }
-    const wb = await zip.xml('xl/workbook.xml');
-    const rels = await relationships(zip, 'xl/_rels/workbook.xml.rels', 'xl');
-    const sheets = descendants(wb, 'sheet').map((s) => ({ name: s.getAttribute('name') || '工作表', path: rels[attr(s, 'id')] })).filter((s) => s.path && zip.has(s.path));
-    if (!sheets.length) throw new Error('XLSX 中没有可读取的工作表');
-    const tables = [];
-    for (const sheet of sheets) {
-      const xml = await zip.xml(sheet.path);
-      const cells = [];
-      let maxRow = 0, maxCol = 0;
-      descendants(xml, 'c').forEach((c) => {
-        const ref = c.getAttribute('r') || '';
-        const row = rowIndex(ref), col = colIndex(ref);
-        if (row >= 500 || col >= 100) return;
-        let value = '';
-        if ((c.getAttribute('t') || '') === 'inlineStr') value = nodeText(c);
-        else {
-          const v = descendants(c, 'v')[0];
-          value = v ? (v.textContent || '') : '';
-          if (c.getAttribute('t') === 's' && value !== '') value = shared[Number(value)] || '';
-          else if (c.getAttribute('t') === 'b') value = value === '1' ? 'TRUE' : 'FALSE';
-        }
-        cells.push({ row, col, value });
-        maxRow = Math.max(maxRow, row); maxCol = Math.max(maxCol, col);
-      });
-      const grid = Array.from({ length: maxRow + 1 }, () => Array(maxCol + 1).fill(''));
-      cells.forEach((c) => { grid[c.row][c.col] = c.value; });
-      const rows = grid.map((row, i) => '<tr><th>' + (i + 1) + '</th>' + row.map((v) => '<td>' + esc(v) + '</td>').join('') + '</tr>').join('');
-      tables.push('<section class="xlsx-sheet" data-sheet="' + esc(sheet.name) + '"><div class="xlsx-scroll"><table><tbody>' + rows + '</tbody></table></div>' + (maxRow >= 499 || maxCol >= 99 ? '<p class="muted">为保证流畅度，仅显示前 500 行、100 列。</p>' : '') + '</section>');
-    }
+  function normalizeNumber(v) {
+    const s = String(v == null ? '' : v);
+    if (!/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(s)) return s;
+    const n = Number(s);
+    return Number.isFinite(n) ? String(Number(n.toPrecision(15))) : s;
+  }
+
+  function renderSheetGrid(container, sheets) {
+    const tables = sheets.map((sheet) => {
+      const rows = sheet.rows.map((row, i) => '<tr><th>' + (i + 1) + '</th>' + row.map((v) => '<td>' + esc(v) + '</td>').join('') + '</tr>').join('');
+      return '<section class="xlsx-sheet" data-sheet="' + esc(sheet.name) + '"><div class="xlsx-scroll"><table><tbody>' + rows + '</tbody></table></div>' +
+        (sheet.truncated ? '<p class="muted">为保证流畅度，仅显示前 500 行、100 列。</p>' : '') + '</section>';
+    });
     container.innerHTML = '<div class="xlsx-book"><div class="xlsx-tabs">' + sheets.map((s, i) => '<button class="btn sm' + (i === 0 ? ' primary' : '') + '" data-i="' + i + '">' + esc(s.name) + '</button>').join('') + '</div>' + tables.join('') + '</div>';
     const sections = Array.from(container.querySelectorAll('.xlsx-sheet'));
     const show = (i) => {
@@ -222,6 +200,85 @@
     };
     container.querySelectorAll('.xlsx-tabs button').forEach((b) => { b.onclick = () => show(Number(b.dataset.i)); });
     show(0);
+  }
+
+  async function renderXlsx(container, zip) {
+    const shared = [];
+    if (zip.has('xl/sharedStrings.xml')) {
+      const xml = await zip.xml('xl/sharedStrings.xml');
+      descendants(xml, 'si').forEach((si) => shared.push(nodeText(si)));
+    }
+    const wb = await zip.xml('xl/workbook.xml');
+    const rels = await relationships(zip, 'xl/_rels/workbook.xml.rels', 'xl');
+    const sheetRefs = descendants(wb, 'sheet').map((s) => ({ name: s.getAttribute('name') || '工作表', path: rels[attr(s, 'id')] })).filter((s) => s.path && zip.has(s.path));
+    if (!sheetRefs.length) throw new Error('XLSX 中没有可读取的工作表');
+    const sheets = [];
+    for (const sheet of sheetRefs) {
+      const xml = await zip.xml(sheet.path);
+      const cells = [];
+      let maxRow = 0, maxCol = 0, truncated = false;
+      descendants(xml, 'c').forEach((c) => {
+        const ref = c.getAttribute('r') || '';
+        const row = rowIndex(ref), col = colIndex(ref);
+        if (row >= 500 || col >= 100) { truncated = true; return; }
+        let value = '';
+        if ((c.getAttribute('t') || '') === 'inlineStr') value = nodeText(c);
+        else {
+          const v = descendants(c, 'v')[0];
+          value = v ? (v.textContent || '') : '';
+          if (c.getAttribute('t') === 's' && value !== '') value = shared[Number(value)] || '';
+          else if (c.getAttribute('t') === 'b') value = value === '1' ? 'TRUE' : 'FALSE';
+          else value = normalizeNumber(value);
+        }
+        cells.push({ row, col, value });
+        maxRow = Math.max(maxRow, row); maxCol = Math.max(maxCol, col);
+      });
+      const grid = Array.from({ length: maxRow + 1 }, () => Array(maxCol + 1).fill(''));
+      cells.forEach((c) => { grid[c.row][c.col] = c.value; });
+      sheets.push({ name: sheet.name, rows: grid, truncated });
+    }
+    renderSheetGrid(container, sheets);
+  }
+
+  let xlsxLoading = null;
+  function loadXlsxLib() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxLoading) return xlsxLoading;
+    xlsxLoading = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = ((window.App && App.BASE) || '') + 'assets/vendor/xlsx.full.min.js';
+      script.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('SheetJS 初始化失败'));
+      script.onerror = () => reject(new Error('本地 XLS 解析组件加载失败'));
+      document.head.appendChild(script);
+    });
+    return xlsxLoading;
+  }
+
+  async function renderLegacyXls(container, buffer) {
+    await loadXlsxLib();
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true, cellText: true });
+    if (!wb.SheetNames.length) throw new Error('XLS 中没有可读取的工作表');
+    const sheets = wb.SheetNames.slice(0, 30).map((name) => {
+      const ws = wb.Sheets[name];
+      if (!ws || !ws['!ref']) return { name, rows: [], truncated: false };
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      const truncated = range.e.r > 499 || range.e.c > 99;
+      range.e.r = Math.min(range.e.r, 499);
+      range.e.c = Math.min(range.e.c, 99);
+      const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true, range });
+      return { name, rows: grid.map((r) => r.map((v) => normalizeNumber(v == null ? '' : String(v)))), truncated };
+    });
+    renderSheetGrid(container, sheets);
+  }
+
+  async function renderLegacyPpt(container, buffer) {
+    if (!window.LegacyOffice) throw new Error('本地 PPT 解析组件未加载');
+    const slides = await LegacyOffice.readPpt(buffer);
+    container.innerHTML = '<div class="ppt-deck legacy-ppt">' + slides.map((slide) =>
+      '<section class="ppt-slide"><div class="ppt-num">' + slide.index + ' / ' + slides.length + '</div>' +
+      '<div class="ppt-content"><div class="ppt-text"><h2>' + esc(slide.title || '（无标题）') + '</h2>' +
+      slide.paragraphs.map((p) => '<p>' + esc(p) + '</p>').join('') + '</div></div></section>').join('') +
+      '</div><p class="legacy-note">旧版 PPT 为二进制格式，此处还原文字内容；图片、图表、动画与排版无法完整呈现。</p>';
   }
 
   function inlineMarkdown(text) {
@@ -310,6 +367,14 @@
         else await renderXlsx(container, zip);
         return;
       }
+      if (ext === 'ppt') {
+        await renderLegacyPpt(container, await fetchBuffer(url, OFFICE_SIZE_LIMIT));
+        return;
+      }
+      if (ext === 'xls') {
+        await renderLegacyXls(container, await fetchBuffer(url, OFFICE_SIZE_LIMIT));
+        return;
+      }
       container.innerHTML = code(await fetchText(url), ext);
     } catch (e) {
       container.innerHTML = '<div class="browser-empty"><strong>本地预览失败</strong><p>' + esc(e && e.message ? e.message : e) + '</p><p class="muted">文件仍可下载后用本机 Office 或文本编辑器打开。</p></div>';
@@ -348,5 +413,26 @@
     return cues;
   }
 
-  window.LocalPreview = { render, markdown, code, parseLrc, parseSubtitle, srtToVtt, fetchText };
+  function parseAss(text) {
+    const cues = [];
+    let fields = [];
+    const time = (v) => {
+      const m = /(\d+):(\d{1,2}):(\d{1,2})[.:](\d{1,3})/.exec(v.trim());
+      return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4].padEnd(3, '0')) / 1000 : null;
+    };
+    String(text).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n').forEach((line) => {
+      if (/^Format:/i.test(line)) { fields = line.slice(7).split(',').map((v) => v.trim().toLowerCase()); return; }
+      if (!/^Dialogue:/i.test(line)) return;
+      const parts = line.slice(9).split(',');
+      const textIndex = fields.includes('text') ? fields.indexOf('text') : 9;
+      if (parts.length <= textIndex) return;
+      const start = time(parts[fields.includes('start') ? fields.indexOf('start') : 1] || '');
+      const end = time(parts[fields.includes('end') ? fields.indexOf('end') : 2] || '');
+      const body = parts.slice(textIndex).join(',').replace(/\{[^}]*\}/g, '').replace(/\\N/gi, '\n').replace(/\\h/gi, ' ').trim();
+      if (start != null && end != null && body) cues.push({ start, end, text: body });
+    });
+    return cues.sort((a, b) => a.start - b.start);
+  }
+
+  window.LocalPreview = { render, markdown, code, parseLrc, parseSubtitle, parseAss, srtToVtt, fetchText };
 })();

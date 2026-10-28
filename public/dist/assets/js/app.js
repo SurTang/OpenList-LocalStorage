@@ -180,17 +180,21 @@
    * 顶栏
    * ------------------------------------------------------------------ */
   function topbar(kind) {
-    const homeIcon = S.settings.home_icon || '/assets/icons/home.svg';
+    const homeSetting = S.settings.home_icon || '';
+    const customHome = (/^(https?:)?\/\//.test(homeSetting) || homeSetting.startsWith('/') || homeSetting.startsWith('data:')) &&
+      homeSetting !== '/assets/icons/home.svg';
+    // 默认使用内联 i-home，与顶栏其它 currentColor 线性图标完全一致。
+    const homeMarkup = customHome ? iconOrImage(homeSetting) : icon('i-home');
     let left = '';
     let right = '';
 
     if (kind === 'admin') {
-      left = '<button class="nav-btn" data-act="home">' + iconOrImage(homeIcon) + '<span>首页</span></button>' +
+      left = '<button class="nav-btn" data-act="home">' + homeMarkup + '<span>首页</span></button>' +
         '<button class="nav-btn primary" data-act="admin-home">' + icon('i-shield') + '<span>管理</span></button>';
       right = '<button class="nav-btn" data-act="account">' + icon('i-key') + '<span>账号</span></button>' +
         '<button class="nav-btn" data-act="logout">' + icon('i-logout') + '<span>退出登录</span></button>';
     } else {
-      left = '<button class="nav-btn" data-act="home">' + iconOrImage(homeIcon) + '<span>首页</span></button>';
+      left = '<button class="nav-btn" data-act="home">' + homeMarkup + '<span>首页</span></button>';
       if (isAdmin()) {
         right = '<button class="nav-btn" data-act="admin">' + icon('i-shield') + '<span>管理</span></button>';
       } else if (S.user && !isGuest()) {
@@ -2004,7 +2008,7 @@
     } else if (e === 'pdf') {
       size = 'xwide';
       stage = '<div class="preview-stage"><iframe src="' + url + '" title="PDF 预览"></iframe></div>';
-    } else if (['docx', 'pptx', 'xlsx', 'md', 'markdown'].includes(e)) {
+    } else if (['docx', 'pptx', 'xlsx', 'ppt', 'xls', 'md', 'markdown'].includes(e)) {
       size = 'xwide';
       stage = '<div class="doc-preview" id="doc-preview"><div class="browser-empty">正在本地解析文档…</div></div>';
     } else if (type === 4 || ['txt', 'text', 'json', 'js', 'jsx', 'ts', 'tsx', 'css', 'scss', 'html', 'htm', 'xml', 'yml', 'yaml', 'go', 'py', 'sh', 'bat', 'ps1', 'log', 'ini', 'conf', 'java', 'c', 'h', 'cpp', 'hpp', 'cs', 'rs', 'php', 'rb', 'sql', 'vue', 'toml', 'csv'].includes(e)) {
@@ -2046,7 +2050,7 @@
         initPlayers(mask, meta, url);
         const doc = mask.querySelector('#doc-preview');
         if (doc && window.LocalPreview) LocalPreview.render(doc, e, url);
-        if (isMedia) initMediaCompanions(mask, path);
+        if (isMedia) initMediaCompanions(mask, path, meta);
       },
     });
   }
@@ -2093,36 +2097,49 @@
     return null;
   }
 
-  async function initMediaCompanions(mask, path) {
+  function mountVideoSubtitles(mask, video, cues, sourceLabel) {
+    const box = mask.querySelector('#pv-subs');
+    if (!box || !cues.length) return;
+    let visible = true;
+    const renderCue = () => {
+      const t = video.currentTime || 0;
+      const cue = cues.find((c) => t >= c.start && t <= c.end);
+      box.textContent = cue ? cue.text : '';
+      box.hidden = !visible || !cue;
+    };
+    video.addEventListener('timeupdate', renderCue);
+    video.addEventListener('seeked', renderCue);
+    renderCue();
+    const btn = mask.querySelector('#pv-subtitle');
+    if (btn) {
+      btn.hidden = false;
+      btn.title = '切换字幕 · ' + sourceLabel;
+      btn.classList.add('on');
+      btn.onclick = () => {
+        visible = !visible;
+        btn.classList.toggle('on', visible);
+        renderCue();
+      };
+    }
+  }
+
+  async function initMediaCompanions(mask, path, meta) {
     const video = mask.querySelector('#pv-video');
     if (video) {
-      const sidecar = await findSidecar(path, ['vtt', 'srt']);
-      if (!sidecar || !mask.isConnected) return;
       try {
-        const cues = LocalPreview.parseSubtitle(await LocalPreview.fetchText(sidecar.url));
-        const box = mask.querySelector('#pv-subs');
-        if (!cues.length || !box) return;
-        let visible = true;
-        const renderCue = () => {
-          const cue = cues.find((c) => audioTime(video) >= c.start && audioTime(video) <= c.end);
-          box.textContent = cue ? cue.text : '';
-          box.hidden = !visible || !cue;
-        };
-        const audioTime = (v) => v.currentTime || 0;
-        video.addEventListener('timeupdate', renderCue);
-        video.addEventListener('seeked', renderCue);
-        renderCue();
-        const btn = mask.querySelector('#pv-subtitle');
-        if (btn) {
-          btn.hidden = false;
-          btn.classList.add('on');
-          btn.onclick = () => {
-            visible = !visible;
-            btn.classList.toggle('on', visible);
-            renderCue();
-          };
+        const sidecar = await findSidecar(path, ['vtt', 'srt', 'ass', 'ssa']);
+        if (!mask.isConnected) return;
+        if (sidecar) {
+          const source = await LocalPreview.fetchText(sidecar.url);
+          const cues = ['ass', 'ssa'].includes(sidecar.ext) ? LocalPreview.parseAss(source) : LocalPreview.parseSubtitle(source);
+          mountVideoSubtitles(mask, video, cues, baseName(sidecar.path));
+          return;
         }
-      } catch (_) { /* 字幕损坏不影响视频播放 */ }
+        if (['mp4', 'mov', 'm4v'].includes(ext(path)) && window.EmbeddedSubtitles) {
+          const cues = await EmbeddedSubtitles.extractMp4(rawUrl(path, meta.sign, true), meta.size);
+          mountVideoSubtitles(mask, video, cues, '视频内嵌');
+        }
+      } catch (_) { /* 字幕损坏或存储不支持 Range 时不阻塞视频播放 */ }
       return;
     }
 

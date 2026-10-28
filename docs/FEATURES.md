@@ -377,23 +377,26 @@ openlist.exe admin reset-password -u <用户名> -p <新密码>   :: 直接改�
 | 类型 | 能力 |
 |---|---|
 | 图片 | 缩放（按钮 / 滚轮）、旋转 90°、全屏、OCR 识别文字、下载 |
-| 视频 | 自建控制条：播放暂停、进度、时间、倍速（0.5-2x）、音量、静音、**截图**、**循环**、画中画、全屏；空格播放/暂停、左右键 ±5s；鼠标静止自动隐藏控制条；自动加载同名 `.vtt` / `.srt` 字幕 |
+| 视频 | 自建控制条：播放暂停、进度、时间、倍速（0.5-2x）、音量、静音、**截图**、**循环**、画中画、全屏；空格播放/暂停、左右键 ±5s；鼠标静止自动隐藏控制条；优先读取同名 `.vtt` / `.srt` / `.ass` / `.ssa`，没有时自行提取 MP4 / MOV 内嵌字幕 |
 | 音频 | 本地封面、播放、进度、音量、静音、循环、倍速；自动加载同名 `.lrc` 歌词并逐行高亮滚动 |
 | 文本 / 代码 | 等宽字体、字号可调（12-16px）、自动换行开关、超 1MB 截断提示；代码显示语言标签 |
 | Markdown | 本地渲染标题、段落、加粗/斜体/删除线、行内代码、围栏代码块、列表、任务列表、引用、分割线、链接、管道表格；禁用原始 HTML 防 XSS |
 | PDF | iframe 内嵌浏览器 PDF 阅读器（浏览器自带，不加载外部服务） |
 | Word（.docx） | 浏览器本地解包 OOXML，渲染标题层级、段落、列表、表格与内嵌图片 |
 | PowerPoint（.pptx） | 本地解析每页文本与图片，按幻灯片顺序纵向排列 |
+| PowerPoint 97-2003（.ppt） | 自写 OLE 复合文档解析，读取 `PowerPoint Document` 流并还原每页文字；图片与动画无法还原 |
 | Excel（.xlsx） | 本地解析共享字符串与单元格，按工作表分页签展示（最多 500 行 × 100 列） |
+| Excel 97-2003（.xls） | 本地内嵌 SheetJS 解析 BIFF 工作簿，多工作表、格式化值与日期 |
 | 其它 | 提示不支持预览 + 下载按钮 |
 
 **本地预览的实现边界**
 
-- 不依赖 CDN、第三方服务或服务端转换进程；`public/dist/assets/js/preview.js` 是唯一的解析入口
-- Office 文件用浏览器原生 `DecompressionStream('deflate-raw')` 解开 OOXML 的 ZIP 容器，再用 `DOMParser` 解析 XML
+- 不依赖 CDN、第三方服务或服务端转换进程；`preview.js` 负责文档解析，`legacy.js` 负责旧版 PPT，`subtitles.js` 负责内嵌字幕
+- OOXML 文件用浏览器原生 `DecompressionStream('deflate-raw')` 解开 ZIP 容器，再用 `DOMParser` 解析 XML
+- 旧版 PPT 自写 OLE 复合文档解析，读取 `PowerPoint Document` 流的 `SlideListWithText` / 文本原子；旧版 XLS 使用内嵌的 SheetJS（Apache-2.0，`assets/vendor/LICENSE.sheetjs`），仅在打开 `.xls` 时按需加载
 - PDF 交给浏览器内置阅读器（Chrome / Edge 均自带），服务端只提供支持 Range 的文件流
-- 字幕 / 歌词为同目录同名附属文件：`video.mp4` 对应 `video.vtt` 或 `video.srt`，`audio.mp3` 对应 `audio.lrc`；找不到时静默隐藏对应入口
-- 旧版浏览器若不支持 `DecompressionStream`，Office 预览会给出明确提示，不影响下载
+- 字幕优先读同目录同名 `.vtt` / `.srt` / `.ass` / `.ssa`；没有侧车文件时，MP4 / MOV 通过 Range 读取 `moov` 样本表并解码 `tx3g` / `wvtt` 字幕样本，不下载整个视频
+- 歌词为同目录同名 `.lrc`；找不到字幕 / 歌词时静默隐藏对应入口
 
 **底部操作栏**：文件大小 / 修改时间、识别文字（图片）、外部播放器（音视频）、链接 / 二维码、关闭、下载。
 
@@ -671,9 +674,9 @@ openlist.exe crypt                          :: 加解密工具
 | 项 | 数值 |
 |---|---|
 | exe | 约 58 MB（前端已内嵌，无外部文件） |
-| 前端源码 | 257 KB（11 个文件，无构建步骤） |
+| 前端源码 | 约 1.15 MB（15 个文件，无构建步骤；含 862 KB 内嵌 SheetJS） |
 | 运行时依赖 | 无（单一可执行文件） |
-| 预览依赖 | 无外部库 / 无 CDN；Office、Markdown、字幕歌词均为自写解析 |
+| 预览依赖 | 无 CDN、无外部服务；OOXML / Markdown / PPT / 字幕为自写解析，旧版 XLS 使用内嵌 SheetJS（Apache-2.0） |
 | 首次启动 | < 2 秒（创建数据库与配置） |
 
 ### 6.5 可维护性
@@ -696,9 +699,11 @@ openlist.exe crypt                          :: 加解密工具
 | 打包不能续传 | 动态 ZIP 不产生固定 `Content-Length`，下载中断需重新生成票据；单次最多 50000 个条目 |
 | 多线程上限 | 仅 8MB-2GB 的文件启用；超过 2GB 交给浏览器原生下载，避免 Blob 内存上限 |
 | Office 预览精度 | 只还原文本、标题、列表、基础表格与内嵌图片；不还原页眉页脚、分栏、图表、SmartArt、公式排版、动画与宏 |
+| 旧版 PPT | 仅提取文字（按页），不还原图片、图表、动画与版式；加密文件无法解析 |
+| 旧版 XLS | 使用内嵌 SheetJS 解析，不执行宏与外部链接；超大工作簿与复杂样式可能简化 |
 | Excel 公式 | 显示工作簿中缓存的单元格值；不执行公式计算，未缓存结果的公式可能为空 |
 | 图片视图范围 | 首页扫描最多 400 个目录 / 240 张图片，超大目录不会一次全部列出 |
-| 字幕歌词 | 只读取同目录同名附属文件（.vtt / .srt / .lrc），不解析视频内嵌字幕轨，也不读取音频标签内嵌歌词 |
+| 字幕歌词 | 优先同目录 `.vtt` / `.srt` / `.ass` / `.ssa` / `.lrc`；无侧车时仅提取 MP4 / MOV 的内嵌字幕（mov_text / WebVTT），MKV、AVI 的内嵌轨暂不解析；不读取音频标签内嵌歌词 |
 | 外部播放器 | 依赖本机已安装并注册 URL 协议（`potplayer://` 等），未安装时无提示 |
 | OCR | 依赖系统已安装对应语言包；无语言包时返回空结果 |
 | 非 Windows 服务 | exe 自身不是服务，开机自启需任务计划程序 / nssm |
@@ -735,7 +740,7 @@ openlist.exe crypt                          :: 加解密工具
 | `logo` | 站点图标 | /assets/images/logo.svg | 顶部导航使用的图标，默认本地 SVG |
 | `favicon` | 网站图标 | /assets/images/favicon.svg | 浏览器标签页图标 |
 | `main_color` | 主题色 | #2563eb | 影响按钮、链接、首页背景等 |
-| `home_icon` | 主页图标 | 🏠 | 首页按钮图标，可填本地路径或 emoji |
+| `home_icon` | 主页图标 | /assets/icons/home.svg | 首页按钮图标，可填本地路径；emoji 会回退为内置线性图标 |
 | `share_icon` | 分享图标 | 🎁 | 分享按钮图标 |
 | `hide_storage_details` | 隐藏存储详情 | true | 访客看不到存储驱动与容量信息 |
 | `hide_storage_details_in_manage_page` | 管理页隐藏存储详情 | true | 管理页列表不显示底层信息 |
@@ -840,7 +845,7 @@ openlist.exe crypt                          :: 加解密工具
 
 以上均可在「设置 → 预览」中增删。
 
-前端另外内置 `docx / pptx / xlsx / md / markdown` 的本地解析分支，不依赖上述后端类型设置；`md` 在文本列表中，会优先走 Markdown 渲染。代码与纯文本共用文本预览，额外识别 `jsx / ts / tsx / cs / rs / php / rb / sql / toml / csv / bat / ps1` 等扩展名。
+前端另外内置 `docx / pptx / xlsx / ppt / xls / md / markdown` 的本地解析分支，不依赖上述后端类型设置；`md` 在文本列表中，会优先走 Markdown 渲染。代码与纯文本共用文本预览，额外识别 `jsx / ts / tsx / cs / rs / php / rb / sql / toml / csv / bat / ps1` 等扩展名。
 
 ### C. 前端路由
 
@@ -863,5 +868,5 @@ openlist.exe crypt                          :: 加解密工具
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
-| v4.1.0-local | 2026-10-28 | 本地增强预览（PDF / docx / pptx / xlsx / Markdown / 代码 / 文本、视频 VTT·SRT 字幕、音频 LRC 歌词）；首页图片视图；服务端流式打包下载（一次性票据、递归目录与空目录）；单文件多线程 Range 下载与进度弹窗 |
+| v4.1.0-local | 2026-10-28 | 本地增强预览（PDF / docx / pptx / xlsx / ppt / xls / Markdown / 代码 / 文本、视频 VTT·SRT·MP4 内嵌字幕、音频 LRC 歌词）；首页图片视图；服务端流式打包下载（一次性票据、递归目录与空目录）；单文件多线程 Range 下载与进度弹窗；顶栏首页按钮统一为内置线性图标 |
 | v4.0.0-local | 2026-10-27 | 首个本地化版本：驱动收敛为 local/smb/ftp/sftp；移除媒体库、离线下载、种子、SSO、LDAP、S3、转码、外部索引；前端重写为纯静态 SPA；新增忘记密码（重置码）、本地 OCR、本地二维码；默认端口 5245；提供 exe / IIS / Node 三种部署方式与 CI 自动发布 |
