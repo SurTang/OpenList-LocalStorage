@@ -25,7 +25,10 @@ func Down(c *gin.Context) {
 		common.ErrorPage(c, err, 500)
 		return
 	}
-	if common.ShouldProxy(storage, filename) {
+	// inline=1 用于在线预览：保持 Content-Disposition: inline，PDF 才能在 iframe 中直接打开。
+	_, inline := c.GetQuery("inline")
+	inline = inline && common.CanInline(filename)
+	if inline || common.ShouldProxy(storage, filename) {
 		Proxy(c)
 		return
 	} else {
@@ -53,8 +56,10 @@ func Proxy(c *gin.Context) {
 	}
 	// 支持 ?force 参数强制代理（用于媒体库等需要 JS 加载文件内容的场景，避免 CORS 问题）
 	_, forceProxy := c.GetQuery("force")
-	if forceProxy || canProxy(storage, filename) {
-		if _, ok := c.GetQuery("d"); !ok {
+	_, inline := c.GetQuery("inline")
+	inline = inline && common.CanInline(filename)
+	if forceProxy || inline || canProxy(storage, filename) {
+		if _, ok := c.GetQuery("d"); !ok && !inline {
 			if url := common.GenerateDownProxyURL(storage.GetStorage(), rawPath); url != "" {
 				c.Redirect(302, url)
 				return

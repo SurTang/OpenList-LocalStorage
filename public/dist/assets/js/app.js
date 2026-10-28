@@ -473,12 +473,13 @@
       '<section class="hero"><h1>' + fmt.esc(siteTitle()) + '</h1>' +
       '<p>' + fmt.esc(S.settings.announcement || '选择下方任意存储即可开始浏览文件。') + '</p>' +
       '<div class="hero-actions">' +
+      '<button class="nav-btn" id="hero-images">' + icon('i-image') + '<span>图片视图</span></button>' +
       (canManage ? '<button class="nav-btn" id="hero-add">' + icon('i-plus') + '<span>添加存储</span></button>' : '') +
       (canManage ? '<button class="nav-btn" id="hero-admin">' + icon('i-shield') + '<span>进入管理</span></button>' : '') +
       '</div></section>' +
       '<div class="section-head"><div><h2>存储</h2><p id="storage-count">正在读取存储列表…</p></div>' +
       '<button class="btn sm" id="reload-home">' + icon('i-refresh') + '刷新</button></div>' +
-      '<div id="storage-area"></div>' +
+      '<div id="storage-area"></div><div id="home-gallery" class="home-gallery" hidden></div>' +
       '</div>';
 
     const area = view.querySelector('#storage-area');
@@ -486,7 +487,55 @@
     if (view.querySelector('#hero-add')) view.querySelector('#hero-add').onclick = () => go('#/admin/storage');
     if (view.querySelector('#hero-admin')) view.querySelector('#hero-admin').onclick = () => go('#/admin');
     view.querySelector('#reload-home').onclick = () => loadStorages(area, countEl);
+    const gallery = view.querySelector('#home-gallery');
+    const imageBtn = view.querySelector('#hero-images');
+    let showingImages = false;
+    imageBtn.onclick = async () => {
+      showingImages = !showingImages;
+      area.hidden = showingImages;
+      gallery.hidden = !showingImages;
+      imageBtn.querySelector('span').textContent = showingImages ? '返回存储' : '图片视图';
+      countEl.textContent = showingImages ? '递归汇总本地图片，点击即可预览' : '';
+      if (showingImages) await loadHomeGallery(gallery);
+      else await loadStorages(area, countEl);
+    };
     await loadStorages(area, countEl);
+  }
+
+  async function loadHomeGallery(area) {
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif', 'ico'];
+    const limit = 240;
+    area.innerHTML = '<div class="empty-state"><p class="muted">正在扫描存储中的图片…</p></div>';
+    try {
+      const root = await api('api/fs/list', { method: 'POST', body: { path: '/', password: '', page: 1, per_page: 0, refresh: false } });
+      const queue = ((root && root.content) || []).filter((o) => o.is_dir).map((o) => ({ path: '/' + o.name, depth: 0 }));
+      const photos = [];
+      let scanned = 0;
+      while (queue.length && photos.length < limit && scanned < 400 && area.isConnected) {
+        const current = queue.shift();
+        scanned++;
+        try {
+          const d = await api('api/fs/list', { method: 'POST', body: { path: current.path, password: sharePwd(current.path), page: 1, per_page: 0, refresh: false } });
+          for (const o of (d && d.content) || []) {
+            const p = joinPath(current.path, o.name);
+            if (o.is_dir && current.depth < 10) queue.push({ path: p, depth: current.depth + 1 });
+            else if (!o.is_dir && imageExts.includes(ext(o.name))) photos.push({ path: p, name: o.name, src: o.thumb || rawUrl(p, o.sign, true) });
+            if (photos.length >= limit) break;
+          }
+        } catch (_) { /* 无权限或暂不可用的目录不阻塞其他存储 */ }
+        if (scanned % 4 === 0) area.innerHTML = '<div class="empty-state"><p class="muted">已扫描 ' + scanned + ' 个目录，找到 ' + photos.length + ' 张图片…</p></div>';
+      }
+      if (!area.isConnected) return;
+      if (!photos.length) {
+        area.innerHTML = '<div class="empty-state"><div class="empty-ico">' + icon('i-image') + '</div><h3>没有找到图片</h3><p>在存储中放入 JPG、PNG、WebP、GIF 等图片后即可在这里直接预览。</p></div>';
+        return;
+      }
+      area.innerHTML = '<p class="muted">共显示 ' + photos.length + ' 张图片' + (photos.length >= limit ? '（为避免长时间扫描，最多显示 ' + limit + ' 张）' : '') + '</p>' +
+        '<div class="home-gallery-grid">' + photos.map((p, i) => '<button class="home-photo" data-i="' + i + '" title="' + fmt.esc(p.path) + '"><img loading="lazy" src="' + fmt.esc(p.src) + '" alt="' + fmt.esc(p.name) + '"><span>' + fmt.esc(p.name) + '</span></button>').join('') + '</div>';
+      area.querySelectorAll('.home-photo').forEach((el) => { el.onclick = () => showPreview(photos[Number(el.dataset.i)].path); });
+    } catch (e) {
+      area.innerHTML = '<div class="empty-state"><h3>图片视图加载失败</h3><p>' + fmt.esc(errText(e)) + '</p></div>';
+    }
   }
 
   async function loadStorages(area, countEl) {
@@ -761,8 +810,8 @@
     return api('api/fs/get', { method: 'POST', body: { path, password: sharePwd(path) } });
   }
 
-  function rawUrl(path, sign) {
-    return App.BASE + 'd' + fmt.encodePath(path) + (sign ? '?sign=' + encodeURIComponent(sign) : '');
+  function rawUrl(path, sign, inline) {
+    return App.BASE + 'd' + fmt.encodePath(path) + (sign ? '?sign=' + encodeURIComponent(sign) : '') + (inline ? (sign ? '&' : '?') + 'inline=1' : '');
   }
 
   async function renderBrowse(view, path) {
@@ -845,7 +894,7 @@
         '<button class="btn link" id="b-all">全选本页</button>' +
         '<button class="btn link" id="b-none">清空</button>' +
         '<span class="spacer"></span>' +
-        '<button class="btn sm" id="b-zip">' + icon('i-download') + '打包下载</button>' +
+        '<button class="btn sm" id="b-zip"' + (boolSetting('package_download', true) ? '' : ' hidden') + '>' + icon('i-download') + '打包下载</button>' +
       (st.write ? '<button class="btn sm" id="b-move">' + icon('i-move') + '移动</button>' +
           '<button class="btn sm" id="b-copy">' + icon('i-copy') + '复制</button>' +
           '<button class="btn sm" id="b-rename">' + icon('i-edit') + '重命名</button>' +
@@ -1120,6 +1169,7 @@
       ? '<button class="menu-item" data-k="open">' + icon('i-folder') + '打开</button>'
       : '<button class="menu-item" data-k="preview">' + icon('i-video') + '预览</button>');
     if (!isDir) items.push('<button class="menu-item" data-k="download">' + icon('i-download') + '下载</button>');
+    if (isDir && boolSetting('package_download', true)) items.push('<button class="menu-item" data-k="pack">' + icon('i-download') + '打包下载此文件夹</button>');
     items.push('<button class="menu-item" data-k="share">' + icon('i-link') + '创建分享</button>');
     items.push('<button class="menu-item" data-k="copylink">' + icon('i-qr') + '直链 / 二维码</button>');
     if (st.write) {
@@ -1134,6 +1184,7 @@
     bind('open', () => go('#/browse?path=' + encodeURIComponent(fullPath)));
     bind('preview', () => showPreview(fullPath, done));
     bind('download', () => download(fullPath));
+    bind('pack', () => packageDownload([fullPath], baseName(fullPath) || '打包下载'));
     bind('share', () => showShareCreate(fullPath));
     bind('copylink', () => showLinkDialog(fullPath));
     bind('rename', () => showRename(fullPath, done));
@@ -1668,7 +1719,7 @@
     }
   }
 
-  async function packageDownload(paths, title) {
+  async function packageDownloadBrowser(paths, title) {
     const mask = Modal.open('' +
       '<div class="modal-head"><h3>打包下载</h3><button class="icon-btn" data-close>' + icon('i-close') + '</button></div>' +
       '<div class="modal-body"><div id="zip-status" class="muted">正在统计文件…</div>' +
@@ -1731,9 +1782,43 @@
     }
   }
 
+  // 服务端流式打包：浏览器直接保存，不把整包读入内存。
+  async function packageDownload(paths, title) {
+    if (!paths.length) return;
+    // 分享路径的鉴权模型独立，沿用浏览器端打包作为兼容分支。
+    if (paths.some((p) => p.startsWith('/@s/'))) {
+      packageDownloadBrowser(paths, title);
+      return;
+    }
+    const mask = Modal.open('' +
+      '<div class="modal-head"><h3>打包下载</h3><button class="icon-btn" data-close>' + icon('i-close') + '</button></div>' +
+      '<div class="modal-body"><p id="zip-status" class="muted" style="margin:0">正在校验所选文件并创建下载任务…</p></div>' +
+      '<div class="modal-foot"><button class="btn" data-close>取消</button></div>', { dismissable: true });
+    try {
+      const d = await api('api/fs/package/ticket', {
+        method: 'POST',
+        body: { items: paths.map((p) => ({ path: p, password: sharePwd(p) })), name: title || '打包下载' },
+      });
+      if (!mask.isConnected) return;
+      mask.querySelector('#zip-status').textContent = '正在由服务端生成压缩包，浏览器将直接保存…';
+      const target = App.BASE + 'api/fs/package?ticket=' + encodeURIComponent(d.ticket);
+      setTimeout(() => Modal.close(), 300);
+      // 顶层导航交给浏览器原生下载管理器，避免 fetch 把整包读入内存。
+      window.location.assign(target);
+      toast('已开始打包下载，文件较大时浏览器需要一段时间接收', 'ok');
+    } catch (e) {
+      Modal.close();
+      toastErr(e);
+    }
+  }
+
   async function download(path) {
     try {
       const meta = await fileMeta(path);
+      if (!meta.is_dir && meta.size >= 8 * 1024 * 1024 && meta.size <= 2 * 1024 * 1024 * 1024 && !/^\/@s\//.test(path)) {
+        await acceleratedDownload(path, meta);
+        return;
+      }
       const url = meta.raw_url && /^https?:/.test(meta.raw_url) ? meta.raw_url : rawUrl(path, meta.sign);
       const a = document.createElement('a');
       a.href = url;
@@ -1744,6 +1829,73 @@
       a.click();
       a.remove();
     } catch (e) { toastErr(e); }
+  }
+
+  // 分块并发下载：服务端 Range 保持流式，浏览器按块聚合，适合大文件。
+  async function acceleratedDownload(path, meta) {
+    const concurrency = Math.min(6, Math.max(2, (navigator.hardwareConcurrency || 4) - 1));
+    const chunkSize = meta.size > 256 * 1024 * 1024 ? 8 * 1024 * 1024 : 4 * 1024 * 1024;
+    const total = Math.ceil(meta.size / chunkSize);
+    const parts = new Array(total);
+    let next = 0, loaded = 0;
+    const controller = new AbortController();
+    let canceled = false;
+    const mask = Modal.open('' +
+      '<div class="modal-head"><h3>下载文件</h3><button class="icon-btn" data-close>' + icon('i-close') + '</button></div>' +
+      '<div class="modal-body download-progress"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + fmt.esc(meta.name) + '</div>' +
+      '<p class="muted" id="dl-status" style="margin:6px 0 0">正在连接…</p>' +
+      '<div class="bar"><i id="dl-bar" style="width:0"></i></div></div>' +
+      '<div class="modal-foot"><button class="btn" id="dl-cancel">取消</button></div>', { dismissable: false });
+    mask.querySelector('#dl-cancel').onclick = () => { canceled = true; controller.abort(); Modal.close(); };
+    const url = App.BASE + 'p' + fmt.encodePath(path) + '?sign=' + encodeURIComponent(meta.sign || '') + '&force&d=1';
+    const status = mask.querySelector('#dl-status');
+    const bar = mask.querySelector('#dl-bar');
+    const update = () => {
+      const pct = Math.min(100, Math.round((loaded / meta.size) * 100));
+      bar.style.width = pct + '%';
+      status.textContent = fmt.size(loaded) + ' / ' + fmt.size(meta.size) + ' · ' + pct + '% · ' + concurrency + ' 线程';
+    };
+    const worker = async () => {
+      while (!canceled) {
+        const i = next++;
+        if (i >= total) return;
+        const start = i * chunkSize;
+        const end = Math.min(meta.size - 1, start + chunkSize - 1);
+        const res = await fetch(url, { headers: { Range: 'bytes=' + start + '-' + end }, signal: controller.signal });
+        if (res.status !== 206) throw new Error(res.status === 200 ? '该存储不支持分块下载，已取消加速' : '分块下载失败（HTTP ' + res.status + '）');
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength !== end - start + 1) throw new Error('分块数据不完整');
+        parts[i] = buf;
+        loaded += buf.byteLength;
+        update();
+      }
+    };
+    try {
+      update();
+      await Promise.all(Array.from({ length: concurrency }, worker));
+      if (canceled) return;
+      status.textContent = '正在合并文件…';
+      const blob = new Blob(parts, { type: 'application/octet-stream' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = meta.name || '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+      Modal.close();
+      toast('下载完成（' + fmt.size(meta.size) + '，' + concurrency + ' 线程）', 'ok');
+    } catch (e) {
+      Modal.close();
+      if (canceled || e.name === 'AbortError') return;
+      toast('分块下载失败，已切换为普通下载：' + (e.message || e), 'err');
+      const a = document.createElement('a');
+      a.href = rawUrl(path, meta.sign);
+      a.download = meta.name || '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
   }
 
   async function directLink(path) {
@@ -1830,7 +1982,7 @@
     } catch (e) { toastErr(e); return; }
     if (meta.is_dir) { go('#/browse?path=' + encodeURIComponent(path)); return; }
 
-    const url = rawUrl(path, meta.sign);
+    const url = rawUrl(path, meta.sign, true);
     const e = ext(meta.name);
     const type = meta.type;
     let stage = '';
@@ -1848,21 +2000,17 @@
         '<img class="audio-cover" src="' + fmt.esc(abs(S.settings.audio_cover || '/assets/images/audio-cover.svg')) + '" alt="封面">' +
         '<div class="audio-title">' + fmt.esc(meta.name) + '</div>' +
         audioStage(url, boolSetting('audio_autoplay', true)) +
-        '</div>';
+        '<div class="lyrics-box" id="pv-lyrics" hidden></div></div>';
     } else if (e === 'pdf') {
       size = 'xwide';
       stage = '<div class="preview-stage"><iframe src="' + url + '" title="PDF 预览"></iframe></div>';
-    } else if (type === 4 || ['txt', 'md', 'json', 'js', 'css', 'html', 'xml', 'yml', 'yaml', 'go', 'py', 'sh', 'log', 'ini', 'conf'].includes(e)) {
+    } else if (['docx', 'pptx', 'xlsx', 'md', 'markdown'].includes(e)) {
+      size = 'xwide';
+      stage = '<div class="doc-preview" id="doc-preview"><div class="browser-empty">正在本地解析文档…</div></div>';
+    } else if (type === 4 || ['txt', 'text', 'json', 'js', 'jsx', 'ts', 'tsx', 'css', 'scss', 'html', 'htm', 'xml', 'yml', 'yaml', 'go', 'py', 'sh', 'bat', 'ps1', 'log', 'ini', 'conf', 'java', 'c', 'h', 'cpp', 'hpp', 'cs', 'rs', 'php', 'rb', 'sql', 'vue', 'toml', 'csv'].includes(e)) {
       size = 'xwide';
       const tv = localSettings.get();
-      stage = '<pre class="preview-text" id="preview-text" style="font-size:' + (tv.textSize || 13) + 'px;white-space:' + (tv.textWrap !== false ? 'pre-wrap' : 'pre') + '">正在加载…</pre>';
-      fetch(url).then((r) => r.text()).then((t) => {
-        const el = document.getElementById('preview-text');
-        if (el) el.textContent = t.length > 512 * 1024 ? t.slice(0, 512 * 1024) + '\n\n…（内容过长，已截断）' : t;
-      }).catch(() => {
-        const el = document.getElementById('preview-text');
-        if (el) el.textContent = '无法读取文本内容';
-      });
+      stage = '<div class="doc-preview code-wrap" id="doc-preview" style="font-size:' + (tv.textSize || 13) + 'px"><div class="browser-empty">正在读取文本…</div></div>';
     } else {
       stage = '<div class="preview-stage" style="background:#fff"><div class="browser-empty">该文件类型不支持在线预览<br><br>' +
         '<button class="btn primary" id="pv-download">下载文件</button></div></div>';
@@ -1896,6 +2044,9 @@
         const extBtn = mask.querySelector('#pv-external');
         if (extBtn) extBtn.onclick = () => showOpenWith(extBtn, url, path, meta.name);
         initPlayers(mask, meta, url);
+        const doc = mask.querySelector('#doc-preview');
+        if (doc && window.LocalPreview) LocalPreview.render(doc, e, url);
+        if (isMedia) initMediaCompanions(mask, path);
       },
     });
   }
@@ -1930,9 +2081,86 @@
     bind('dl', () => download(path));
   }
 
+  async function findSidecar(path, extensions) {
+    const base = path.replace(/\.[^.\/]+$/, '');
+    for (const extName of extensions) {
+      const sidePath = base + '.' + extName;
+      try {
+        const meta = await fileMeta(sidePath);
+        if (meta && !meta.is_dir) return { path: sidePath, ext: extName, url: rawUrl(sidePath, meta.sign) };
+      } catch (_) { /* 同名附属文件不存在时继续尝试下一种格式 */ }
+    }
+    return null;
+  }
+
+  async function initMediaCompanions(mask, path) {
+    const video = mask.querySelector('#pv-video');
+    if (video) {
+      const sidecar = await findSidecar(path, ['vtt', 'srt']);
+      if (!sidecar || !mask.isConnected) return;
+      try {
+        const cues = LocalPreview.parseSubtitle(await LocalPreview.fetchText(sidecar.url));
+        const box = mask.querySelector('#pv-subs');
+        if (!cues.length || !box) return;
+        let visible = true;
+        const renderCue = () => {
+          const cue = cues.find((c) => audioTime(video) >= c.start && audioTime(video) <= c.end);
+          box.textContent = cue ? cue.text : '';
+          box.hidden = !visible || !cue;
+        };
+        const audioTime = (v) => v.currentTime || 0;
+        video.addEventListener('timeupdate', renderCue);
+        video.addEventListener('seeked', renderCue);
+        renderCue();
+        const btn = mask.querySelector('#pv-subtitle');
+        if (btn) {
+          btn.hidden = false;
+          btn.classList.add('on');
+          btn.onclick = () => {
+            visible = !visible;
+            btn.classList.toggle('on', visible);
+            renderCue();
+          };
+        }
+      } catch (_) { /* 字幕损坏不影响视频播放 */ }
+      return;
+    }
+
+    const audio = mask.querySelector('#pv-audio');
+    if (audio) {
+      const sidecar = await findSidecar(path, ['lrc']);
+      if (!sidecar || !mask.isConnected) return;
+      try {
+        const rows = LocalPreview.parseLrc(await LocalPreview.fetchText(sidecar.url));
+        const box = mask.querySelector('#pv-lyrics');
+        if (!box || !rows.length) return;
+        box.hidden = false;
+        box.innerHTML = '<div class="lyrics-title">歌词 · ' + fmt.esc(baseName(sidecar.path)) + '</div>' +
+          rows.map((r, i) => '<div class="lyric-line" data-i="' + i + '">' + fmt.esc(r.text || '♪') + '</div>').join('');
+        const lines = Array.from(box.querySelectorAll('.lyric-line'));
+        let active = -1;
+        const syncLyrics = () => {
+          let next = 0;
+          for (let i = 0; i < rows.length; i++) {
+            if (rows[i].time == null || rows[i].time <= audio.currentTime + 0.08) next = i;
+            else break;
+          }
+          if (next === active) return;
+          active = next;
+          lines.forEach((el, i) => el.classList.toggle('active', i === active));
+          const el = lines[active];
+          if (el) box.scrollTo({ top: Math.max(0, el.offsetTop - box.clientHeight / 2 + el.clientHeight), behavior: 'smooth' });
+        };
+        audio.addEventListener('timeupdate', syncLyrics);
+        syncLyrics();
+      } catch (_) { /* 歌词损坏不影响音频播放 */ }
+    }
+  }
+
   function videoStage(url, autoplay) {
     return '<div class="player" id="pv-player">' +
       '<video id="pv-video" src="' + url + '" playsinline preload="metadata"' + (autoplay ? ' autoplay' : '') + '></video>' +
+      '<div class="pv-subs" id="pv-subs" hidden></div>' +
       '<div class="player-bar">' +
       '<button class="pbtn" id="pv-play">' + icon('i-play') + '</button>' +
       '<span class="time" id="pv-time">00:00 / 00:00</span>' +
@@ -1941,6 +2169,7 @@
       '<button class="pbtn" id="pv-mute" title="静音">' + icon('i-volume') + '</button>' +
       '<input type="range" class="vol" id="pv-vol" min="0" max="100" value="100" title="音量">' +
       '<button class="pbtn" id="pv-snap" title="截取当前画面">' + icon('i-camera') + '</button>' +
+      '<button class="pbtn" id="pv-subtitle" title="切换字幕" hidden>字幕</button>' +
       '<button class="pbtn" id="pv-loop" title="循环播放">' + icon('i-repeat') + '</button>' +
       '<button class="pbtn" id="pv-pip" title="画中画">' + icon('i-pip') + '</button>' +
       '<button class="pbtn" id="pv-full" title="全屏">' + icon('i-fullscreen') + '</button>' +

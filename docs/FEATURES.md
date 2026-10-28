@@ -1,7 +1,7 @@
 # OpenList-LocalStorage 功能规格说明书
 
-> 版本：v4.0.0-local  
-> 更新：2026-10-27  
+> 版本：v4.1.0-local  
+> 更新：2026-10-28  
 > 适用：`dist/openlist.exe`（单文件）、IIS 站点、Node.js 托管  
 > 许可证：AGPL-3.0（基于 [OpenList](https://github.com/OpenListTeam/OpenList) 改造）
 
@@ -265,6 +265,7 @@ openlist.exe admin reset-password -u <用户名> -p <新密码>   :: 直接改�
 - 每个卡片可显示容量（若驱动支持目录大小统计）
 - 未添加任何存储时展示空状态：说明文案 + 「去添加存储」按钮（管理员可见）
 - 顶部可显示站点公告（`announcement`）
+- Hero 操作区：「图片视图」（所有人）、「添加存储」「进入管理」（仅管理员）；图片视图详见 4.15
 
 ### 4.4 文件浏览
 
@@ -324,17 +325,16 @@ openlist.exe admin reset-password -u <用户名> -p <新密码>   :: 直接改�
 | 移动 | 对选中项逐个 `fs/move`，目标不存在则先 `mkdir` |
 | 复制 | 同上 |
 | 删除 | `fs/remove` 一次提交多个 name |
-| **打包下载** | 浏览器端递归收集 + 生成 zip（见下） |
+| **打包下载** | 服务端流式 ZIP（见 4.16） |
 | **批量重命名** | 两种模式（见下） |
 | 聚合移动 | 把多个目录的**内容**合并移动到目标目录，源目录保留为空 |
 | 移除空文件夹 | 递归清理当前目录下所有空目录，需二次确认 |
 
-**打包下载（浏览器端 zip）**
+**打包下载**
 
-- 递归 `fs/list` 收集文件，用 `store`（不压缩）方式生成 zip，UTF-8 文件名标志
-- 逐个文件 `fetch` 直链写入，弹窗显示「正在读取 x/y」「已传输 / 总计」
-- 可取消；生成后自动下载 `<目录名>_<日期>.zip`
-- 限制：所有内容会经过浏览器内存，超大目录（数 GB）可能失败，建议改用服务端直链
+- 选中文件 / 文件夹后点击「打包下载」，服务端递归读取并直接写入 ZIP 响应流，浏览器原生保存
+- 保留目录层级与空目录，UTF-8 文件名，自动下载 `<名称>_<日期>.zip`
+- 全过程不把文件读入浏览器内存；细节、限制与开关见 4.16
 
 **批量重命名**
 
@@ -377,11 +377,23 @@ openlist.exe admin reset-password -u <用户名> -p <新密码>   :: 直接改�
 | 类型 | 能力 |
 |---|---|
 | 图片 | 缩放（按钮 / 滚轮）、旋转 90°、全屏、OCR 识别文字、下载 |
-| 视频 | 自建控制条：播放暂停、进度、时间、倍速（0.5-2x）、音量、静音、**截图**、**循环**、画中画、全屏；空格播放/暂停、左右键 ±5s；鼠标静止自动隐藏控制条 |
-| 音频 | 本地封面、播放、进度、音量、静音、循环、倍速 |
-| 文本 | 等宽字体、字号可调（12-16px）、自动换行开关、超 512KB 截断提示 |
-| PDF | iframe 内嵌浏览器 PDF 阅读器 |
+| 视频 | 自建控制条：播放暂停、进度、时间、倍速（0.5-2x）、音量、静音、**截图**、**循环**、画中画、全屏；空格播放/暂停、左右键 ±5s；鼠标静止自动隐藏控制条；自动加载同名 `.vtt` / `.srt` 字幕 |
+| 音频 | 本地封面、播放、进度、音量、静音、循环、倍速；自动加载同名 `.lrc` 歌词并逐行高亮滚动 |
+| 文本 / 代码 | 等宽字体、字号可调（12-16px）、自动换行开关、超 1MB 截断提示；代码显示语言标签 |
+| Markdown | 本地渲染标题、段落、加粗/斜体/删除线、行内代码、围栏代码块、列表、任务列表、引用、分割线、链接、管道表格；禁用原始 HTML 防 XSS |
+| PDF | iframe 内嵌浏览器 PDF 阅读器（浏览器自带，不加载外部服务） |
+| Word（.docx） | 浏览器本地解包 OOXML，渲染标题层级、段落、列表、表格与内嵌图片 |
+| PowerPoint（.pptx） | 本地解析每页文本与图片，按幻灯片顺序纵向排列 |
+| Excel（.xlsx） | 本地解析共享字符串与单元格，按工作表分页签展示（最多 500 行 × 100 列） |
 | 其它 | 提示不支持预览 + 下载按钮 |
+
+**本地预览的实现边界**
+
+- 不依赖 CDN、第三方服务或服务端转换进程；`public/dist/assets/js/preview.js` 是唯一的解析入口
+- Office 文件用浏览器原生 `DecompressionStream('deflate-raw')` 解开 OOXML 的 ZIP 容器，再用 `DOMParser` 解析 XML
+- PDF 交给浏览器内置阅读器（Chrome / Edge 均自带），服务端只提供支持 Range 的文件流
+- 字幕 / 歌词为同目录同名附属文件：`video.mp4` 对应 `video.vtt` 或 `video.srt`，`audio.mp3` 对应 `audio.lrc`；找不到时静默隐藏对应入口
+- 旧版浏览器若不支持 `DecompressionStream`，Office 预览会给出明确提示，不影响下载
 
 **底部操作栏**：文件大小 / 修改时间、识别文字（图片）、外部播放器（音视频）、链接 / 二维码、关闭、下载。
 
@@ -538,6 +550,44 @@ openlist.exe crypt                          :: 加解密工具
 
 > 除 `server` 外，其余命令都需要 `--data` 指向正确的数据目录（默认 `data`）。
 
+### 4.15 首页图片视图
+
+首页 Hero 区的「图片视图」按钮会在原地切换为图片墙，不新增路由。
+
+| 项 | 规则 |
+|---|---|
+| 数据来源 | 从根目录逐个存储递归扫描，最多访问 400 个目录、深度 10 层、展示 240 张图片 |
+| 支持格式 | jpg / jpeg / png / gif / webp / bmp / svg / avif / ico |
+| 缩略图 | 优先使用驱动生成的 `thumb`（本地驱动可开缩略图），没有则直接用原图签名地址 |
+| 交互 | 自适应网格、懒加载；点击图片打开现有预览弹窗（缩放 / 旋转 / 全屏 / OCR） |
+| 容错 | 单个目录无权限或读取失败会跳过，不影响其他存储；扫描过程显示进度 |
+| 权限 | 完全复用 `fs/list` 的登录、密码与权限校验，前端不额外提升权限 |
+
+### 4.16 打包下载与单文件加速
+
+**服务端流式打包（文件 / 文件夹 / 多选）**
+
+| 项 | 说明 |
+|---|---|
+| 入口 | 工具栏批量「打包下载」、文件菜单「打包下载此文件夹」 |
+| 流程 | 前端 `POST /api/fs/package/ticket` 校验权限并取得一次性票据 → 浏览器顶层跳转 `GET /api/fs/package?ticket=…` → 服务端边读边写 ZIP |
+| 票据 | 256 位随机、2 分钟有效、只用一次；不把登录 token 放进 URL |
+| 内容 | 递归包含子目录与空目录，保留原文件名（UTF-8），同名根目录自动加 `_2` |
+| 体积 | 不占浏览器内存，`Content-Disposition` 交给浏览器原生下载管理器 |
+| 限制 | 单次最多 50000 个条目；动态 ZIP 不支持断点续传；任一目录读取失败会中止并报错，避免生成残缺包 |
+| 开关 | 设置 `package_download`（默认开）；关闭后前端隐藏入口，后端票据接口同时拒绝 |
+
+**单文件多线程下载**
+
+| 项 | 说明 |
+|---|---|
+| 触发 | 文件 ≥ 8MB 且 ≤ 2GB 时走加速，其余走浏览器原生下载 |
+| 实现 | 按 4MB / 8MB 分块，默认 `min(6, CPU-2)` 个并发 `Range` 请求，走同源 `/p/...?force&d=1` 代理 |
+| 校验 | 每块必须返回 `206`，长度必须与请求区间一致；任一异常则自动回退普通下载 |
+| 进度 | 弹窗显示已下载 / 总大小 / 百分比 / 线程数，可随时取消（`AbortController`） |
+| 完整性 | 分块按序合并为 Blob 后保存，文件名与原文件一致 |
+| 边界 | 服务端或存储不支持 Range 时回退；超过 2GB 交给原生下载，避免浏览器 Blob 上限 |
+
 ---
 
 ## 5. 接口概览
@@ -558,10 +608,11 @@ openlist.exe crypt                          :: 加解密工具
 | 登录 | `/api` | 无 | `POST /auth/login`、`/auth/login/hash`、`GET /auth/reset_info`、`POST /auth/reset_password` |
 | 当前用户 | `/api` | 登录 | `GET /me`、`POST /me/update`、`/me/sshkey/*`、`POST /auth/2fa/generate`、`/auth/2fa/verify`、`/auth/2fa/disable`、`GET /auth/logout` |
 | 文件 | `/api/fs` | 登录或访客 | `POST /list`、`/get`、`/dirs`、`/search`、`/mkdir`、`/rename`、`/batch_rename`、`/regex_rename`、`/move`、`/recursive_move`、`/copy`、`/remove`、`/remove_empty_directory`、`PUT /put`、`PUT /form`、`/multipart/*`、`POST /link`、`/archive/decompress`、`/other` |
+| 打包 | `/api/fs` | 票据 | `POST /package/ticket`（登录后取票据）、`GET /package?ticket=`（一次性，流式 ZIP，无需 Authorization） |
 | 分享 | `/api/share` | 非访客 | `GET /list`、`/get`、`POST /create`、`/update`、`/delete`、`/enable`、`/disable` |
 | 任务 | `/api/task` | 非访客 | 列表、取消、删除、重试 |
 | 管理 | `/api/admin` | 管理员 | `meta`、`user`、`storage`、`driver`、`setting`、`task`、`index`、`archive`、`scan`、`message`（消息中心已无前端入口） |
-| 直链 | `/d/<path>?sign=` | 签名 | 文件流，支持 Range |
+| 直链 | `/d/<path>?sign=` | 签名 | 文件流，支持 Range；预览加 `&inline=1` 返回 `Content-Disposition: inline`（PDF 必需） |
 | WebDAV | `/dav` | Basic Auth | 需权限位 8 / 9 |
 
 **关键约定**
@@ -569,6 +620,8 @@ openlist.exe crypt                          :: 加解密工具
 - `fs/list` 返回 `content[]`（`name`/`size`/`is_dir`/`modified`/`type`/`thumb`）、`total`、`write`
 - `fs/get` 返回 `raw_url`（第三方直链，可能为空）、`sign`（本地签名）、`type`
 - 上传：`PUT /api/fs/put`，文件路径放请求头 `File-Path`，`As-Task` 控制是否进任务队列，`Overwrite` 控制覆盖
+- 打包：`package/ticket` 请求体 `{ items: [{ path, password }], name }`，返回 `{ ticket, expires_in }`；下载地址为 `GET api/fs/package?ticket=…`，响应 `application/zip`
+- 加速下载：`/p/<path>?sign=…&force&d=1` 强制同源代理并保留 `Range`，返回 `206` + `Content-Range`
 - 分享访问：`/@s/<share_id>`，提取码通过请求体 `password` 传递
 
 ---
@@ -584,6 +637,8 @@ openlist.exe crypt                          :: 加解密工具
 | 并发 | 默认最大并发下载 64（`OPENLIST_MAX_CONCURRENCY`），可按机器调整 |
 | 限速 | 客户端/服务端上下行四个维度独立限速（KB/s，-1 不限） |
 | 大文件 | `/d/` 走流式输出，支持 Range（断点续传、拖动进度条） |
+| 多线程下载 | 单文件 ≥ 8MB 时前端并发 2-6 个 Range 请求，同源代理，默认 4MB / 8MB 分块 |
+| 服务端打包 | 边读存储边写 ZIP 响应流，不落临时文件、不进浏览器内存 |
 | 缩略图 | 本地驱动可开启，独立并发数（默认 16）与缓存目录，避免阻塞列表 |
 
 ### 6.2 安全
@@ -600,21 +655,25 @@ openlist.exe crypt                          :: 加解密工具
 | 上传 | 限制请求体大小；可配置允许的扩展名与忽略系统文件 |
 | XSS | 前端所有动态文本经 `esc()` 转义；自定义 head/body 由管理员显式配置 |
 | CSRF | 认证走 `Authorization` 头而非 Cookie，跨站表单无法自动携带 |
+| 打包票据 | 256 位随机、2 分钟过期、一次性消费、不携带登录 token；生成前先逐项校验权限 |
+| 本地预览 | Office / Markdown 全在浏览器内存中解析，文件不上传第三方；Markdown 禁用原始 HTML 并对链接做协议白名单 |
+| 内联预览 | `inline=1` 仅对 PDF、图片、音视频扩展名生效；HTML / SVG / JS 等仍强制 `attachment`，防止同源脚本执行 |
 
 ### 6.3 兼容性
 
 - 服务端：Windows 10 / 11 / Server 2016+，x64；不依赖 .NET、VC++ 运行库（纯静态 Go 二进制）
-- 浏览器：Chrome / Edge 90+（使用了 `dialog`、`ResizeObserver`、`fetch`、CSS 变量等现代特性）
+- 浏览器：Chrome / Edge 90+；Office 本地预览需要 `DecompressionStream('deflate-raw')`（Chrome / Edge 103+），其余预览不受影响
 - 数据库：默认内嵌 SQLite（无需安装）；可切换 MySQL 5.7+
-- 反向代理：IIS（HttpPlatformHandler / ARR）、Nginx、Caddy 均可
+- 反向代理：IIS（HttpPlatformHandler / ARR）、Nginx、Caddy 均可；反向代理需保留 `Range` 请求头与 `Content-Range` 响应头，否则多线程下载自动回退
 
 ### 6.4 体积与依赖
 
 | 项 | 数值 |
 |---|---|
 | exe | 约 58 MB（前端已内嵌，无外部文件） |
-| 前端源码 | 221 KB（10 个文件，无构建步骤） |
+| 前端源码 | 257 KB（11 个文件，无构建步骤） |
 | 运行时依赖 | 无（单一可执行文件） |
+| 预览依赖 | 无外部库 / 无 CDN；Office、Markdown、字幕歌词均为自写解析 |
 | 首次启动 | < 2 秒（创建数据库与配置） |
 
 ### 6.5 可维护性
@@ -633,7 +692,13 @@ openlist.exe crypt                          :: 加解密工具
 | 无媒体库 | 影像墙、播放列表、Emby / Subsonic 客户端接入均已移除 |
 | 无离线下载 | 不含 aria2 / BT / 磁力链，工具栏也无入口 |
 | 无多语言 | 仅简体中文，`i18n` 机制已去掉 |
-| 打包下载占内存 | 浏览器端生成 zip，需把所选文件读入内存；目录总量超过约 1-2 GB 时建议逐个下载 |
+| 打包下载占内存 | 保留浏览器端兜底实现（仅分享路径使用）；普通路径已改为服务端流式 ZIP，不受此限制 |
+| 打包不能续传 | 动态 ZIP 不产生固定 `Content-Length`，下载中断需重新生成票据；单次最多 50000 个条目 |
+| 多线程上限 | 仅 8MB-2GB 的文件启用；超过 2GB 交给浏览器原生下载，避免 Blob 内存上限 |
+| Office 预览精度 | 只还原文本、标题、列表、基础表格与内嵌图片；不还原页眉页脚、分栏、图表、SmartArt、公式排版、动画与宏 |
+| Excel 公式 | 显示工作簿中缓存的单元格值；不执行公式计算，未缓存结果的公式可能为空 |
+| 图片视图范围 | 首页扫描最多 400 个目录 / 240 张图片，超大目录不会一次全部列出 |
+| 字幕歌词 | 只读取同目录同名附属文件（.vtt / .srt / .lrc），不解析视频内嵌字幕轨，也不读取音频标签内嵌歌词 |
 | 外部播放器 | 依赖本机已安装并注册 URL 协议（`potplayer://` 等），未安装时无提示 |
 | OCR | 依赖系统已安装对应语言包；无语言包时返回空结果 |
 | 非 Windows 服务 | exe 自身不是服务，开机自启需任务计划程序 / nssm |
@@ -775,6 +840,8 @@ openlist.exe crypt                          :: 加解密工具
 
 以上均可在「设置 → 预览」中增删。
 
+前端另外内置 `docx / pptx / xlsx / md / markdown` 的本地解析分支，不依赖上述后端类型设置；`md` 在文本列表中，会优先走 Markdown 渲染。代码与纯文本共用文本预览，额外识别 `jsx / ts / tsx / cs / rs / php / rb / sql / toml / csv / bat / ps1` 等扩展名。
+
 ### C. 前端路由
 
 | 路由 | 页面 |
@@ -796,4 +863,5 @@ openlist.exe crypt                          :: 加解密工具
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| v4.1.0-local | 2026-10-28 | 本地增强预览（PDF / docx / pptx / xlsx / Markdown / 代码 / 文本、视频 VTT·SRT 字幕、音频 LRC 歌词）；首页图片视图；服务端流式打包下载（一次性票据、递归目录与空目录）；单文件多线程 Range 下载与进度弹窗 |
 | v4.0.0-local | 2026-10-27 | 首个本地化版本：驱动收敛为 local/smb/ftp/sftp；移除媒体库、离线下载、种子、SSO、LDAP、S3、转码、外部索引；前端重写为纯静态 SPA；新增忘记密码（重置码）、本地 OCR、本地二维码；默认端口 5245；提供 exe / IIS / Node 三种部署方式与 CI 自动发布 |

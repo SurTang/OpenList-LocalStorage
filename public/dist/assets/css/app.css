@@ -782,3 +782,58 @@ th.sortable:hover { color: var(--brand); }
 .audio-player .pbtn.on { background: var(--brand); color: #fff; }
 .audio-player .pbtn .ico { width: 16px; height: 16px; fill: currentColor; }
 .audio-player .vol { width: 68px; accent-color: var(--brand); height: 4px; }
+
+/* ---------- 本地文档 / 图片视图 / 歌词 ---------- */
+.doc-preview { height: min(72vh, 900px); overflow: auto; background: #e9edf3; }
+.doc-page { max-width: 860px; min-height: 100%; margin: 24px auto; padding: 48px 56px; background: #fff; color: #1f2937; box-shadow: 0 3px 18px rgba(20,30,50,.10); line-height: 1.75; }
+.doc-page p { margin: .55em 0; white-space: pre-wrap; }
+.doc-page h1, .doc-page h2, .doc-page h3 { line-height: 1.35; margin: 1.1em 0 .45em; }
+.doc-page h1 { font-size: 28px; } .doc-page h2 { font-size: 23px; } .doc-page h3 { font-size: 19px; }
+.doc-space { height: 12px; }
+.doc-inline-image { display: block; max-width: 100%; max-height: 520px; margin: 14px auto; object-fit: contain; }
+.doc-table-wrap { overflow: auto; margin: 16px 0; }
+.doc-table { width: 100%; border-collapse: collapse; }
+.doc-table td { border: 1px solid #cfd6e1; padding: 7px 10px; vertical-align: top; }
+.ppt-deck { padding: 22px; display: grid; gap: 24px; }
+.ppt-slide { position: relative; width: min(100%, 1000px); aspect-ratio: 16 / 9; min-height: 360px; margin: auto; padding: 52px 60px; overflow: auto; background: #fff; box-shadow: 0 4px 22px rgba(20,30,50,.13); }
+.ppt-num { position: absolute; right: 16px; top: 10px; color: #7a8494; font-size: 12px; }
+.ppt-content { height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.ppt-content img { max-width: 100%; max-height: 55vh; margin: auto; object-fit: contain; }
+.ppt-text h2 { font-size: 30px; margin: 0 0 12px; } .ppt-text p { font-size: 20px; margin: 7px 0; }
+.xlsx-book { min-height: 100%; background: #fff; }
+.xlsx-tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 6px; overflow-x: auto; padding: 10px; background: #f5f7fa; border-bottom: 1px solid var(--line); }
+.xlsx-scroll { overflow: auto; max-height: calc(min(72vh, 900px) - 58px); }
+.xlsx-sheet table { border-collapse: collapse; min-width: 100%; font-size: 13px; }
+.xlsx-sheet td, .xlsx-sheet th { min-width: 100px; max-width: 340px; height: 30px; padding: 4px 8px; border: 1px solid #dfe4eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.xlsx-sheet th { position: sticky; left: 0; z-index: 1; min-width: 44px; background: #f2f4f7; color: var(--muted); text-align: center; }
+.markdown-body img { max-width: 100%; }
+.markdown-body blockquote { margin: 14px 0; padding: 8px 16px; border-left: 4px solid var(--brand); background: #f5f7fb; color: #566174; }
+.markdown-body code { padding: 2px 5px; border-radius: 4px; background: #eef1f6; font-family: var(--mono); font-size: .92em; }
+.markdown-body .md-code { padding: 16px; overflow: auto; border-radius: 8px; background: #17202e; color: #e6edf7; }
+.markdown-body .md-code code { padding: 0; background: transparent; color: inherit; }
+.md-image-alt { color: var(--muted); }
+.md-table-wrap { overflow: auto; margin: 16px 0; }
+.md-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.md-table th, .md-table td { padding: 8px 12px; border: 1px solid #d8dee8; text-align: left; }
+.md-table th { background: #f3f6fa; font-weight: 650; }
+.code-wrap { background: #fff; }
+.code-preview { min-height: 100%; background: #fff; }
+.code-lang { position: sticky; top: 0; z-index: 1; padding: 7px 16px; background: #eef1f6; color: var(--muted); font: 12px var(--mono); text-transform: uppercase; }
+.code-lines { margin: 0; padding: 20px 24px; min-height: calc(100% - 34px); border: 0; border-radius: 0; background: #fff; color: #243248; counter-reset: line; tab-size: 4; }
+.audio-box { max-height: 78vh; overflow: auto; }
+.lyrics-box { position: relative; width: min(100%, 560px); height: 230px; margin: 14px auto 4px; padding: 70px 24px; overflow-y: auto; scroll-behavior: smooth; mask-image: linear-gradient(transparent, #000 25%, #000 75%, transparent); }
+.lyrics-title { position: absolute; top: 8px; left: 0; right: 0; color: var(--muted); font-size: 12px; text-align: center; }
+.lyric-line { padding: 7px 12px; color: #788396; text-align: center; transition: .2s; }
+.lyric-line.active { color: var(--brand); font-size: 18px; font-weight: 650; }
+#pv-subtitle { width: auto; padding: 0 8px; font-size: 12px; }
+.pv-subs { position: absolute; left: 6%; right: 6%; bottom: 58px; z-index: 2; color: #fff; font-size: clamp(15px, 2.1vw, 24px); font-weight: 600; line-height: 1.45; text-align: center; white-space: pre-line; pointer-events: none; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.85); }
+.home-gallery { padding: 6px 0 24px; }
+.home-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.home-photo { position: relative; aspect-ratio: 1; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #e8ecf2; cursor: zoom-in; }
+.home-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .2s; }
+.home-photo:hover img { transform: scale(1.035); }
+.home-photo span { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 9px 7px; overflow: hidden; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.72)); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.download-progress { min-width: 260px; }
+.download-progress .bar { height: 7px; margin-top: 10px; overflow: hidden; border-radius: 6px; background: var(--bg-soft); }
+.download-progress .bar i { display: block; height: 100%; background: var(--brand); transition: width .15s; }
+@media (max-width: 640px) { .doc-page { margin: 0; padding: 24px 20px; } .ppt-slide { min-height: 280px; padding: 38px 24px; } .home-gallery-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; } }

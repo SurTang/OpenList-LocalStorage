@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	stdpath "path"
 	"strings"
 
 	"maps"
@@ -18,6 +19,7 @@ import (
 )
 
 func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.Obj) error {
+	inline := isInlineRequest(r, file)
 	// if link.MFile != nil {
 	// 	attachHeader(w, file, link)
 	// 	http.ServeContent(w, r, file.GetName(), file.ModTime(), link.MFile)
@@ -25,7 +27,7 @@ func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.
 	// }
 
 	if link.Concurrency > 0 || link.PartSize > 0 {
-		attachHeader(w, file, link)
+		attachHeader(w, file, link, inline)
 		size := link.ContentLength
 		if size <= 0 {
 			size = file.GetSize()
@@ -38,7 +40,7 @@ func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.
 	}
 
 	if link.RangeReader != nil {
-		attachHeader(w, file, link)
+		attachHeader(w, file, link, inline)
 		size := link.ContentLength
 		if size <= 0 {
 			size = file.GetSize()
@@ -55,7 +57,11 @@ func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.
 	defer res.Body.Close()
 
 	maps.Copy(w.Header(), res.Header)
-	w.Header().Set("Content-Disposition", utils.GenerateContentDisposition(file.GetName()))
+	disposition := utils.GenerateContentDisposition(file.GetName())
+	if inline {
+		disposition = "inline" + strings.TrimPrefix(disposition, "attachment")
+	}
+	w.Header().Set("Content-Disposition", disposition)
 	w.WriteHeader(res.StatusCode)
 	if r.Method == http.MethodHead {
 		return nil
@@ -67,9 +73,31 @@ func Proxy(w http.ResponseWriter, r *http.Request, link *model.Link, file model.
 	})
 	return err
 }
-func attachHeader(w http.ResponseWriter, file model.Obj, link *model.Link) {
+
+func isInlineRequest(r *http.Request, file model.Obj) bool {
+	v := r.URL.Query().Get("inline")
+	return (v == "1" || v == "true") && CanInline(file.GetName())
+}
+
+// CanInline 限制可内联响应的类型，避免用户上传的 HTML/SVG 在同一源执行脚本。
+func CanInline(fileName string) bool {
+	switch strings.ToLower(stdpath.Ext(fileName)) {
+	case ".pdf",
+		".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".ico", ".tif", ".tiff",
+		".mp4", ".webm", ".mkv", ".mov", ".m4v", ".ogv",
+		".mp3", ".flac", ".wav", ".m4a", ".ogg", ".opus", ".aac":
+		return true
+	}
+	return false
+}
+
+func attachHeader(w http.ResponseWriter, file model.Obj, link *model.Link, inline bool) {
 	fileName := file.GetName()
-	w.Header().Set("Content-Disposition", utils.GenerateContentDisposition(fileName))
+	disposition := utils.GenerateContentDisposition(fileName)
+	if inline {
+		disposition = "inline" + strings.TrimPrefix(disposition, "attachment")
+	}
+	w.Header().Set("Content-Disposition", disposition)
 	w.Header().Set("Content-Type", utils.GetMimeType(fileName))
 	size := link.ContentLength
 	if size <= 0 {

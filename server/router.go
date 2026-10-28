@@ -95,6 +95,8 @@ func Init(e *gin.Engine) {
 	// 本地生成二维码（分享链接 / 直链），不依赖外部服务
 	public.GET("/qrcode", handles.QRCode)
 
+	// 浏览器通过一次性票据直接下载流式 ZIP，无需在 URL 中携带登录 token。
+	api.GET("/fs/package", handles.FsPackageDownload)
 	_fs(auth.Group("/fs"))
 	fsAndShare(api.Group("/fs", middlewares.Auth(true)))
 	_task(auth.Group("/task", middlewares.AuthNotGuest))
@@ -181,6 +183,7 @@ func fsAndShare(g *gin.RouterGroup) {
 }
 
 func _fs(g *gin.RouterGroup) {
+	g.POST("/package/ticket", handles.FsPackageTicket)
 	g.Any("/search", middlewares.SearchIndex, handles.Search)
 	g.Any("/other", handles.FsOther)
 	g.Any("/dirs", handles.FsDirs)
